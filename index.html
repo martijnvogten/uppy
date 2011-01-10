@@ -1,0 +1,136 @@
+<html>
+<head>
+<script type="text/javascript">
+  function Uploader(wrapperdivid, config) {
+  
+    var fileQueue = (function() {
+      var queue = [];
+  
+      return {
+        containsFile : function(fileInfo) {
+          for ( var i = 0; i < queue.length; i++) {
+            var test = queue[i];
+            if (test.name == fileInfo.name
+                && test.size == fileInfo.size) {
+              return true;
+            }
+          }
+          return false;
+        },
+        add : function(fileInfo) {
+          queue.push(fileInfo);
+        },
+        removeById : function(fileId) {
+          for ( var i = 0; i < queue.length; i++) {
+            if (queue[i].id == fileId) {
+              queue.splice(i, 1);
+              break;
+            }
+          }
+        }
+      }
+    })();
+  
+    var callbackName = 'Uploader_callback_' + wrapperdivid;
+  
+    window[callbackName] = function(eventName) {
+  //    console.log(arguments);
+      switch (eventName) {
+      case 'select':
+        var fileInfo = arguments[1];
+        if (!fileQueue.containsFile(fileInfo)) { // Check for duplicates
+          fileQueue.add(fileInfo);
+          config.onselect && config.onselect(fileInfo);
+        }
+        break;
+      case 'httpstatus':
+        var fileInfo = arguments[1];
+        var event = arguments[2];
+        if (event.status == 302) {
+          // Error with status 302 is not really an error
+          // but a redirect we get back from YouTube.
+          // File is complete
+          fileQueue.removeById(fileInfo.id);
+          window[callbackName]('complete', fileInfo, event);
+        }
+        break;
+      case 'complete':
+        var fileInfo = arguments[1];
+        fileQueue.removeById(fileInfo.id);
+      default:
+        if (config['on' + eventName]) {
+          var args = [];
+          // Clone arguments since we don't have shift or slice
+          for ( var j = 1; j < arguments.length; j++) {
+            args[j - 1] = arguments[j];
+          }
+          config['on' + eventName].apply(config, args);
+        }
+        break;
+      }
+    };
+  
+    var params = config.params || {};
+    params.allowscriptaccess = 'always';
+    params.allowfullscreen = 'true';
+    params.wmode = 'transparent';
+  
+    var flashVars = {};
+    flashVars.callbackName = callbackName;
+    if (config.singleFile) {
+      flashVars.singleFile = config.singleFile || false;
+    }
+  
+    swfobject.embedSWF(config.swfUrl, wrapperdivid, config.width || 120,
+        config.height || 40, "9.0.0", "expressInstall.swf", flashVars,
+        params, config.attributes || {} // attributes
+    );
+  
+    function getswf() {
+      return document.getElementById(wrapperdivid);
+    }
+  
+    return {
+      upload : function(id, config) {
+        getswf().upload(id, config);
+      },
+      cancel : function(id) {
+        fileQueue.removeById(id);
+        getswf().cancel(id);
+      }
+    };
+  }
+  
+  $(function() {
+	  var upload = new Uploader("wrapperdiv", {
+	      swfUrl: 'swf/uppy.swf',
+	  	  width: 56,
+	  	  height: 22,
+	      singleFile: true,
+	  	  attributes: {
+//	  		  style: 'background: url(../img/bladeren.png) no-repeat',
+	  		  wmode: 'transparent'
+	  	  },
+	      onselect: function(fileInfo) {
+	          selectedFile = fileInfo;
+	          $('#selectedFile').text(fileInfo.name);
+	          $('#titlefield').focus();
+	        },
+	      onprogress: function(fileInfo, progressEvent) {
+	          var perc = Math.floor(100 * (progressEvent.bytesLoaded / progressEvent.bytesTotal)) + "%";
+	          $('#file_' + fileInfo.id).find('.status').text('Bezig met uploaden: ' + perc);
+	          $('#file_' + fileInfo.id + ' span.progressBar span').css({width: perc});
+	        },
+	      oncomplete: function(fileInfo) {
+	          $('#file_' + fileInfo.id).addClass('complete');
+	          $('#file_' + fileInfo.id).find('.status').text('Klaar!');
+	        }
+	  });
+  })
+</script>
+</head>
+<body>
+  <div id="wrapperdiv"></div>
+  <div id="selectedFile"></div>
+</body>
+</html>
